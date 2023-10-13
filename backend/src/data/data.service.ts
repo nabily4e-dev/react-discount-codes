@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,7 +10,7 @@ import { Code, DiscountCodes } from './types/discount-codes';
 
 @Injectable()
 export class DataService {
-  private readonly users = [
+  private users = [
     {
       userId: 1,
       username: 'john',
@@ -22,7 +23,7 @@ export class DataService {
     },
   ];
 
-  private readonly discountCodes = [
+  private discountCodes = [
     {
       userId: 1,
       brandName: 'StyleMart',
@@ -47,15 +48,41 @@ export class DataService {
     },
   ];
 
-  async findUser(username: string): Promise<User | undefined> {
+  addUser(username: string, password: string, brandName: string): User {
+    if (this.findUser(username)) {
+      throw new ConflictException(`${username} is already used registered`);
+    }
+
+    const newUserId = Math.max(...this.users.map((user) => user.userId)) + 1;
+
+    const newUser = {
+      userId: newUserId,
+      username: username,
+      password: password,
+    };
+
+    this.users = [...this.users, newUser];
+
+    const newDiscountCodes = {
+      userId: newUserId,
+      brandName: brandName,
+      codes: [],
+    };
+
+    this.discountCodes = [...this.discountCodes, newDiscountCodes];
+
+    return newUser;
+  }
+
+  findUser(username: string): User | undefined {
     return this.users.find((user) => user.username === username);
   }
 
-  async getDiscountCodes(userId: number): Promise<DiscountCodes | undefined> {
+  getDiscountCodes(userId: number): DiscountCodes | undefined {
     return this.discountCodes.find((user) => user.userId === userId);
   }
 
-  async generateDiscountCodes(userId: number, amount: number): Promise<Code[]> {
+  generateDiscountCodes(userId: number, amount: number): Code[] {
     const newDiscountCodes = generateMultipleDiscountCodes(amount).map(
       (value) => ({ value: value, isUsed: false }),
     );
@@ -68,10 +95,7 @@ export class DataService {
     return newDiscountCodes;
   }
 
-  async markDiscountCodeAsUsed(
-    userId: number,
-    discountCodeValue: string,
-  ): Promise<Code> {
+  markDiscountCodeAsUsed(userId: number, discountCodeValue: string): Code {
     const code = this.discountCodes
       .find((user) => user.userId === userId)
       .codes?.find((code) => code.value === discountCodeValue);

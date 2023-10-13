@@ -30,7 +30,7 @@ export class DiscountCodesController {
     description:
       'Unauthorized. Expired access token? Forgot to provide your access token?',
   })
-  async getDiscountCodes(@Req() request: Request): Promise<DiscountCodes> {
+  getDiscountCodes(@Req() request: Request): DiscountCodes {
     const userId = request['user'].sub;
     return this.discountCodesService.getDiscountCodes(userId);
   }
@@ -44,10 +44,10 @@ export class DiscountCodesController {
     description:
       'Unauthorized. Expired access token? Forgot to provide your access token?',
   })
-  async generateDiscountCodes(
+  generateDiscountCodes(
     @Req() request: Request,
     @Body() dto: GenerateDiscountCodesDto,
-  ): Promise<Code[]> {
+  ): Code[] {
     const userId = request['user'].sub;
     const amount = dto.amount;
     return this.discountCodesService.generateDiscountCodes(userId, amount);
@@ -62,10 +62,10 @@ export class DiscountCodesController {
     description:
       'Unauthorized. Expired access token? Forgot to provide your access token?',
   })
-  async markDiscountCodeAsUsed(
+  markDiscountCodeAsUsed(
     @Req() request: Request,
     @Body() dto: MarkDiscountCodeAsUsedDto,
-  ): Promise<Code> {
+  ): Code {
     const userId = request['user'].sub;
     const discountCodeValue = dto.discountCodeValue;
     return this.discountCodesService.markDiscountCodeAsUsed(

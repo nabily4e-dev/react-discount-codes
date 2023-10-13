@@ -5,15 +5,15 @@ import { DataService } from 'src/data/data.service';
 export class DiscountCodesService {
   constructor(private dataService: DataService) {}
 
-  async getDiscountCodes(userId: number) {
-    return await this.dataService.getDiscountCodes(userId);
+  getDiscountCodes(userId: number) {
+    return this.dataService.getDiscountCodes(userId);
   }
 
-  async markDiscountCodeAsUsed(userId: number, discountCodeValue: string) {
+  markDiscountCodeAsUsed(userId: number, discountCodeValue: string) {
     return this.dataService.markDiscountCodeAsUsed(userId, discountCodeValue);
   }
 
-  async generateDiscountCodes(userId: number, amount: number) {
+  generateDiscountCodes(userId: number, amount: number) {
     return this.dataService.generateDiscountCodes(userId, amount);
   }
 }
