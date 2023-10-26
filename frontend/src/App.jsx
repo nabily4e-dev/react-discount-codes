@@ -1,5 +1,5 @@
-import { Routes, Route, Outlet, Link } from 'react-router-dom';
-import { useState } from 'react';
+import { Routes, Route, Outlet, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 
 import Container from '@mui/material/Container';
 import TextField from '@mui/material/TextField';
@@ -22,6 +22,14 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import TablePaginationActions from '@mui/material/TablePagination/TablePaginationActions';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  changePage,
+  changeRowsPerPage,
+  generateDiscountCode,
+} from './redux/discountCodesSlice';
+import { registerFailure, registerSuccess } from './redux/registerSlice';
+import { loginFailure, loginSuccess } from './redux/authSlice';
 
 export default function App() {
   return (
@@ -34,8 +42,8 @@ export default function App() {
     >
       <Routes>
         <Route path='/' element={<Layout />}>
-          <Route index element={<DiscountCodes />} />
-          <Route path='login' element={<Login />} />
+          <Route index element={<Login />} />
+          <Route path='discount-codes' element={<DiscountCodes />} />
           <Route path='register' element={<Register />} />
           <Route path='*' element={<NoMatch />} />
         </Route>
@@ -88,6 +96,8 @@ const StyledButton = styled(Button)(({ theme }) => ({
 
 function Layout() {
   const [open, setOpen] = useState(true);
+  const auth = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
 
   const handleDrawer = () => {
     setOpen(!open);
@@ -117,13 +127,20 @@ function Layout() {
       <Sidebar variant='persistent' open={open}>
         <NavList>
           <NavItem>
-            <NavLink to='/'>Discount Codes</NavLink>
+            <NavLink to='/'>Login</NavLink>
           </NavItem>
           <NavItem>
-            <NavLink to='/login'>Login</NavLink>
+            <NavLink to='/discount-codes'>Discount Codes</NavLink>
           </NavItem>
           <NavItem>
             <NavLink to='/register'>Register</NavLink>
+          </NavItem>
+          <NavItem>
+            {auth.isLoggedIn && (
+              <NavLink to='/' onClick={dispatch(loginFailure)}>
+                Logout
+              </NavLink>
+            )}
           </NavItem>
         </NavList>
       </Sidebar>
@@ -142,23 +159,73 @@ function createData() {
   return { code, status, action };
 }
 
-const rows = Array.from(Array(14), createData);
+// const rows = Array.from(Array(14), createData);
 
 function DiscountCodes() {
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [discountCodes, setDiscountCodes] = useState([]);
+
+  const auth = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
+
+  const { codes, page, rowsPerPage } = useSelector(
+    (state) => state.discountCodes
+  );
+
+  useEffect(() => {
+    const response = api
+      .get('/discount-codes', {
+        headers: {
+          Authorization: `Bearer ${auth.authToken}`,
+        },
+      })
+      .then((response) => {
+        console.log(response.codes);
+        setDiscountCodes(response.codes);
+      })
+      .catch((e) => {
+        console.log(`Error = ${e}`);
+      });
+  }, []);
+
+  const rows = discountCodes ?? Array.from(Array(14), createData);
 
   const handleChangePage = (event, newPage) => {
-    setPage(newPage);
+    dispatch(changePage(newPage));
   };
 
   const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
+    dispatch(changeRowsPerPage(parseInt(event.target.value, 10)));
+  };
+
+  const handleGenerateDiscountCode = () => {
+    console.log(auth.authToken);
+    const response = api
+      .post(
+        '/discount-codes/generate',
+        {
+          amount: 5,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${auth.auth}`,
+          },
+        }
+      )
+      .then((response) => {
+        console.log(response.data);
+      })
+      .catch((e) => {
+        console.log(e.response);
+      });
+    {
+      dispatch(generateDiscountCode());
+    }
   };
 
   const emptyRows =
     page > 0 ? Math.max(0, (1 + page) * rowsPerPage - rows.length) : 0;
+
+  useEffect(() => {}, []);
 
   return (
     <Box
@@ -195,7 +262,11 @@ function DiscountCodes() {
             },
           }}
         />
-        <StyledButton variant='outlined' color='primary'>
+        <StyledButton
+          variant='outlined'
+          color='primary'
+          onClick={handleGenerateDiscountCode}
+        >
           Generate
         </StyledButton>
       </Box>
@@ -265,8 +336,22 @@ function Login() {
     password: '',
   });
 
+  const auth = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (auth.isLoggedIn) {
+      setSuccessMessage(`You are logged in as ${auth.username}`);
+      setErrorMessage('');
+      setTimeout(() => {
+        navigate('/discount-codes');
+      }, 4000);
+    }
+  }, [auth, navigate]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -276,59 +361,106 @@ function Login() {
     e.preventDefault();
 
     try {
-      const response = await api.post('/auth/login', formData); // replace '/auth/login' with your login endpoint
+      const response = await api.post('/auth/login', formData);
+      console.log(JSON.stringify(response));
+
       if (response.status === 200) {
+        const token = response.data.access_token;
+
+        // Store the token securely
+        document.cookie = `token=${token}`;
+
+        dispatch(
+          loginSuccess({
+            username: formData.username,
+            authToken: token,
+          })
+        );
+
         setSuccessMessage('Successfully logged in!');
         setErrorMessage('');
+
+        // Redirect to the discount codes page after a light delay.
+        setTimeout(() => {
+          navigate('/discount-codes');
+        }, 2000);
+
+        console.log(response.data.access_token);
       }
       setFormData({ username: '', password: '' });
     } catch (error) {
+      dispatch(
+        loginFailure({
+          error: error.response?.data?.message || 'Error logging in',
+        })
+      );
       setErrorMessage(error.response?.data?.message || 'Error logging in');
       setSuccessMessage('');
     }
   };
 
+  console.log(auth.isLoggedIn);
   return (
     <Container maxWidth='sm'>
       <h2>Login</h2>
 
-      <form onSubmit={handleSubmit}>
-        <TextField
-          fullWidth
-          margin='normal'
-          label='Username'
-          variant='outlined'
-          name='username'
-          value={formData.username}
-          onChange={handleChange}
-        />
+      {auth.isLoggedIn && (
+        <>
+          <div
+            style={{ color: 'green' }}
+          >{`Logged in as ${auth.username}`}</div>
+          <br />
+          <div>Redirecting ...</div>
+        </>
+      )}
 
-        <TextField
-          fullWidth
-          margin='normal'
-          label='Password'
-          variant='outlined'
-          type='password'
-          name='password'
-          value={formData.password}
-          onChange={handleChange}
-        />
+      {!auth.isLoggedIn && (
+        <form onSubmit={handleSubmit}>
+          <TextField
+            fullWidth
+            margin='normal'
+            label='Username'
+            variant='outlined'
+            name='username'
+            value={formData.username}
+            onChange={handleChange}
+          />
 
-        {successMessage && (
-          <div style={{ color: 'green' }}>{successMessage}</div>
-        )}
-        {errorMessage && <div style={{ color: 'red' }}>{errorMessage}</div>}
+          <TextField
+            fullWidth
+            margin='normal'
+            label='Password'
+            variant='outlined'
+            type='password'
+            name='password'
+            value={formData.password}
+            onChange={handleChange}
+          />
 
-        <Button
-          fullWidth
-          variant='contained'
-          color='primary'
-          type='submit'
-          style={{ marginTop: '16px' }}
-        >
-          Login
-        </Button>
-      </form>
+          {successMessage && (
+            <div style={{ color: 'green' }}>{successMessage}</div>
+          )}
+          {errorMessage && (
+            <>
+              <div style={{ color: 'red' }}>{errorMessage}</div>
+              <div>
+                You may <Link to='/register'>register</Link> first^^
+              </div>
+            </>
+          )}
+
+          <Button
+            fullWidth
+            variant='contained'
+            color='primary'
+            type='submit'
+            style={{ marginTop: '16px' }}
+            disabled={auth.isLoggedIn}
+          >
+            {auth.isLoggedIn ? 'Logged In' : 'Login'}
+          </Button>
+        </form>
+      )}
     </Container>
   );
 }
@@ -340,8 +472,9 @@ function Register() {
     brandName: '',
   });
 
-  const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const register = useSelector((state) => state.register);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -353,13 +486,24 @@ function Register() {
     try {
       const response = await api.post('/auth/register', formData);
       if (response.status === 201) {
-        setSuccessMessage('Successfully registered!');
-        setErrorMessage('');
+        dispatch(
+          registerSuccess({
+            username: formData.username,
+            success: 'Registration successful!',
+          })
+        );
+
+        setTimeout(() => {
+          navigate('/');
+        }, 2000);
       }
       setFormData({ username: '', password: '', brandName: '' });
     } catch (error) {
-      setErrorMessage(error.response?.data?.message || 'Error registering');
-      setSuccessMessage('');
+      dispatch(
+        registerFailure({
+          error: error.response?.data?.message || 'Error registering',
+        })
+      );
     }
   };
 
@@ -399,10 +543,10 @@ function Register() {
           onChange={handleChange}
         />
 
-        {successMessage && (
-          <div style={{ color: 'green' }}>{successMessage}</div>
+        {register.success && (
+          <div style={{ color: 'green' }}>{register.success}</div>
         )}
-        {errorMessage && <div style={{ color: 'red' }}>{errorMessage}</div>}
+        {register.error && <div style={{ color: 'red' }}>{register.error}</div>}
 
         <Button
           fullWidth
