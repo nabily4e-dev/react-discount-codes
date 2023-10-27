@@ -2,21 +2,39 @@ import { createSlice } from '@reduxjs/toolkit';
 
 const discountCodesSlice = createSlice({
   name: 'discountCodes',
-  initialState: { codes: [], page: 0, rowsPerPage: 5 },
+  initialState: {
+    codes: [],
+    page: 0,
+    rowsPerPage: 5,
+    loading: false,
+    error: null,
+  },
   reducers: {
-    generateDiscountCode(state) {
-      const code = Math.random().toString(36).substring(7);
-      const status = Math.random() < 0.5 ? 'Active' : 'Inactive';
-      const action = Math.random() < 0.5 ? 'Mark as used' : 'Delete';
-      state.codes.push({ code, status, action });
+    fetchStart(state) {
+      state.loading = true;
+      state.error = null;
+    },
+    fetchSuccess(state, action) {
+      const { userId, brandName, codes } = action.payload;
+      state.loading = false;
+      state.userId = userId;
+      state.brandName = brandName;
+      state.codes = codes;
+    },
+    fetchError(state, action) {
+      state.loading = false;
+      state.error = action.payload;
     },
     markAsUsed(state, action) {
-      const index = state.codes.findIndex(
-        (code) => code.code === action.payload
-      );
+      console.log(action.payload);
+      const index = state.codes.findIndex((code) => {
+        code.value === action.payload;
+        console.log(code.value);
+      });
+      console.log(index);
       if (index !== -1) {
-        state.codes[index].status = 'Used';
-        state.codes[index].action = 'Delete';
+        state.codes[index].isUSed = true;
+        state.codes[index].value = action.payload;
       }
     },
     deleteDiscountCode(state, action) {
@@ -29,20 +47,13 @@ const discountCodesSlice = createSlice({
       state.rowsPerPage = action.payload;
       state.page = 0;
     },
-    fetchSuccess(state, action) {
-      const { userId, brandName, codes } = action.payload;
-      state.userId = userId;
-      state.brandName = brandName;
-      state.codes = codes;
-    },
-    fetchError(state, action) {
-      state.error = action.payload;
-    },
   },
 });
 
 export const {
-  generateDiscountCode,
+  fetchStart,
+  fetchSuccess,
+  fetchError,
   markAsUsed,
   deleteDiscountCode,
   changePage,

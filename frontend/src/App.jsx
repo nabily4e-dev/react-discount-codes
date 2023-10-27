@@ -23,13 +23,14 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import TablePaginationActions from '@mui/material/TablePagination/TablePaginationActions';
 import { useDispatch, useSelector } from 'react-redux';
-import {
-  changePage,
-  changeRowsPerPage,
-  generateDiscountCode,
-} from './redux/discountCodesSlice';
+import { changePage, changeRowsPerPage } from './redux/discountCodesSlice';
 import { registerFailure, registerSuccess } from './redux/registerSlice';
 import { loginFailure, loginSuccess } from './redux/authSlice';
+import {
+  fetchDiscountCodes,
+  generateDiscountCodes,
+  markDiscountCodeAsUsed,
+} from './discountCodesThunks';
 
 export default function App() {
   return (
@@ -162,32 +163,36 @@ function createData() {
 // const rows = Array.from(Array(14), createData);
 
 function DiscountCodes() {
-  const [discountCodes, setDiscountCodes] = useState([]);
-
-  const auth = useSelector((state) => state.auth);
+  const [amount, setAmount] = useState(2);
+  const [fetchCodes, setFetchCodes] = useState(false);
   const dispatch = useDispatch();
-
   const { codes, page, rowsPerPage } = useSelector(
     (state) => state.discountCodes
   );
 
-  useEffect(() => {
-    const response = api
-      .get('/discount-codes', {
-        headers: {
-          Authorization: `Bearer ${auth.authToken}`,
-        },
-      })
-      .then((response) => {
-        console.log(response.codes);
-        setDiscountCodes(response.codes);
-      })
-      .catch((e) => {
-        console.log(`Error = ${e}`);
-      });
-  }, []);
+  const rows = Array.from(Array(14), createData);
 
-  const rows = discountCodes ?? Array.from(Array(14), createData);
+  useEffect(() => {
+    if (fetchCodes) {
+      console.log('fetching codes:', dispatch(fetchDiscountCodes(amount)));
+      dispatch(fetchDiscountCodes(amount));
+      setFetchCodes(false);
+    }
+  }, [dispatch, fetchCodes]);
+
+  const handleAmountChange = (event) => {
+    setAmount(event.target.value);
+  };
+
+  const handleGenerateSubmit = (event) => {
+    event.preventDefault();
+    dispatch(generateDiscountCodes(amount));
+    setFetchCodes(true);
+  };
+
+  const handleMarkAsUsedClick = (discountCodeValue) => {
+    dispatch(markDiscountCodeAsUsed(discountCodeValue));
+  };
 
   const handleChangePage = (event, newPage) => {
     dispatch(changePage(newPage));
@@ -197,35 +202,8 @@ function DiscountCodes() {
     dispatch(changeRowsPerPage(parseInt(event.target.value, 10)));
   };
 
-  const handleGenerateDiscountCode = () => {
-    console.log(auth.authToken);
-    const response = api
-      .post(
-        '/discount-codes/generate',
-        {
-          amount: 5,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${auth.auth}`,
-          },
-        }
-      )
-      .then((response) => {
-        console.log(response.data);
-      })
-      .catch((e) => {
-        console.log(e.response);
-      });
-    {
-      dispatch(generateDiscountCode());
-    }
-  };
-
   const emptyRows =
     page > 0 ? Math.max(0, (1 + page) * rowsPerPage - rows.length) : 0;
-
-  useEffect(() => {}, []);
 
   return (
     <Box
@@ -235,8 +213,8 @@ function DiscountCodes() {
       }}
       elevation={3}
     >
-      <Box
-        sx={{
+      <form
+        style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'baseline',
@@ -261,15 +239,18 @@ function DiscountCodes() {
               marginLeft: '18em',
             },
           }}
+          value={amount}
+          onChange={handleAmountChange}
         />
         <StyledButton
           variant='outlined'
           color='primary'
-          onClick={handleGenerateDiscountCode}
+          onClick={handleGenerateSubmit}
+          type='submit'
         >
           Generate
         </StyledButton>
-      </Box>
+      </form>
 
       <TableContainer component={Paper}>
         <Table sx={{ minWidth: 650 }} aria-label='simple table'>
@@ -282,15 +263,28 @@ function DiscountCodes() {
           </TableHead>
           <TableBody>
             {(rowsPerPage > 0
-              ? rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              : rows
-            ).map((row) => (
-              <TableRow hover key={row.code} sx={{ 'td, th': { border: 0 } }}>
+              ? codes.slice(
+                  page * rowsPerPage,
+                  page * rowsPerPage + rowsPerPage
+                )
+              : codes
+            ).map((code) => (
+              <TableRow hover key={code.value} sx={{ 'td, th': { border: 0 } }}>
                 <TableCell component='th' scope='row'>
-                  {row.code}
+                  {code.value}
                 </TableCell>
-                <TableCell align='right'>{row.status}</TableCell>
-                <TableCell align='right'>{row.action}</TableCell>
+                <TableCell align='right'>
+                  {code.isUsed ? 'Used' : 'Active'}
+                </TableCell>
+                <TableCell align='right'>
+                  {code.isUsed ? (
+                    <button disabled>Mark as used</button>
+                  ) : (
+                    <button onClick={() => handleMarkAsUsedClick(code.value)}>
+                      Mark as used
+                    </button>
+                  )}
+                </TableCell>{' '}
               </TableRow>
             ))}
 
@@ -309,7 +303,7 @@ function DiscountCodes() {
               <TablePagination
                 rowsPerPageOptions={[5, 10, 25, { label: 'All', value: -1 }]}
                 colSpan={23}
-                count={rows.length}
+                count={codes.length}
                 rowsPerPage={rowsPerPage}
                 page={page}
                 SelectProps={{
@@ -367,8 +361,8 @@ function Login() {
       if (response.status === 200) {
         const token = response.data.access_token;
 
-        // Store the token securely
-        document.cookie = `token=${token}`;
+        // Store the token securely in local storage
+        localStorage.setItem('token', token);
 
         dispatch(
           loginSuccess({
